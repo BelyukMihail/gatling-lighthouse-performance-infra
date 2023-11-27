@@ -1,0 +1,12 @@
+htmlpublisher:latest
+show-build-parameters:latest
+git:latest
+persistent-parameter:latest
+postbuild-task:latest
+parameter-separator:latest
+log-parser:latest
+compress-buildlog:latest
+groovy-postbuild:latest
+antisamy-markup-formatter:latest
+ssh-slaves:latest
+gatling:latest

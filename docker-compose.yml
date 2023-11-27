@@ -1,0 +1,160 @@
+version: '3.8'
+services:
+  grafana:
+    container_name: grafana
+    image: grafana/grafana
+    ports:
+      - "8857:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_USERS_ALLOW_ORG_CREATE=false
+      - GF_INSTALL_PLUGINS=briangann-datatable-panel
+    volumes:
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+    restart: always
+    # Uncomment to use InfluxDB database as Grafana datasource.
+    links:
+      - influxdb:influxdb
+  influxdb:
+    build: ./influxdb
+    volumes:
+      - influxdb-storage:/var/lib/influxdb2
+    env_file:
+      - .env
+      #    entrypoint: [ "./entrypoint.sh" ]
+    restart: always
+    ports:
+      - ${DOCKER_INFLUXDB_INIT_PORT}:8086
+    depends_on:
+      - telegraf
+  telegraf:
+    build: ./telegraf
+    volumes:
+      - ./telegraf:/etc/telegraf/
+    env_file:
+      - .env
+    ports:
+      - 2003:2003
+  docker-dind:
+    image: docker:dind
+    volumes:
+      - docker-dind:/usr/local/bin
+    container_name: docker-dind
+    privileged: true
+    restart: always
+  jenkins:
+    build: ./jenkins
+    depends_on:
+      - docker-dind
+    container_name: jenkins
+    ports:
+      - "8181:8080"
+      - "50000:50000"
+    environment:
+      # JENKINS_URL_CONFIG variable is used to set jenkins_url variable in jenkins global configuration.
+      # This url will be used to create links to jenkins builds in grafana dashboards, default is http://127.0.0.1:8181/
+      # Slash '/' should be escaped with '\'
+      # - JENKINS_URL_CONFIG=http:\/\/127.0.0.1:8181\/
+      # JENKINS_GRAFANA_URL is used for generating link to grafana report in jenkins job description
+      # default value is 127.0.0.1:8857
+      # - JENKINS_GRAFANA_URL=127.0.0.1:8857
+      - JENKINS_ADMIN_LOGIN=admin
+      - JENKINS_ADMIN_PASSWORD=admin
+    volumes:
+      - docker-dind:/usr/local/bin/dind/
+      - /var/run/docker.sock:/var/run/docker.sock
+      - jenkins-home:/var/jenkins_home
+    restart: always
+  gatling:
+    container_name: gatling
+    build: ./gatling
+    image: "eclipse-temurin:8-jdk"
+    entrypoint:
+      - cat
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    ports:
+      - 9100:9100
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    ports:
+      - 9091:9090
+    depends_on:
+      - cadvisor
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.2
+    container_name: cadvisor
+    privileged: true
+    ports:
+      - 8081:8080
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - redis
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - 6379:6379
+## Uncomment to use NewRelic monitoring agent. Need to add License Key to newrelic-infra.yml.
+#  agent:
+#    container_name: newrelic-infra
+#    build:
+#      context: .
+#      dockerfile: newrelic-infra/newrelic-infra.dockerfile
+#    cap_add:
+#      - SYS_PTRACE
+#    network_mode: host
+#    pid: host
+#    privileged: true
+#    volumes:
+#      - "/:/host:ro"
+#      - "/var/run/docker.sock:/var/run/docker.sock"
+#    restart: unless-stopped
+  node:
+    container_name: lighthouse
+    build: ./lighthouse
+    platform: linux/amd64
+    depends_on:
+      - influxdb
+    volumes:
+      - ./lighthouse:/lighthouse
+    env_file:
+      - .env
+    restart: always
+volumes:
+  docker-dind:
+  jenkins-home:
+  influxdb-storage:
+  prometheus_data: { }
+  lighthouse:
