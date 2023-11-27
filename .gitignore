@@ -1,0 +1,5 @@
+.idea
+.DS_Store
+lighthouse/src/.env
+lighthouse/node_modules
+influxdb/conf
