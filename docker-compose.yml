@@ -25,7 +25,6 @@ services:
       - influxdb-storage:/var/lib/influxdb2
     env_file:
       - .env
-      #    entrypoint: [ "./entrypoint.sh" ]
     restart: always
     ports:
       - ${DOCKER_INFLUXDB_INIT_PORT}:8086
